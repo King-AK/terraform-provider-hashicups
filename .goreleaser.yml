@@ -1,0 +1,55 @@
+# .goreleaser.yml
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+- env:
+    # goreleaser does not work with CGO, it could also complicate
+    # usage by users in CI/CD systems like Terraform Cloud where
+    # they are unable to install libraries.
+    - CGO_ENABLED=0
+  mod_timestamp: '{{ .CommitTimestamp }}'
+  goos:
+    - linux
+    - darwin
+  goarch:
+    - amd64
+    - arm64
+  binary: 'terraform-provider-{{ .Env.PROJECT_NAME }}_v{{ .Env.BUILD_VERSION }}'
+archives:
+- format: zip
+  name_template: 'terraform-provider-{{ .Env.PROJECT_NAME }}_{{ .Env.BUILD_VERSION }}_{{ .Os }}_{{ .Arch }}'
+checksum:
+  extra_files:
+    - glob: 'terraform-registry-manifest.json'
+      name_template: '{{ .Env.PROJECT_NAME }}_{{ .Env.BUILD_VERSION }}_manifest.json'
+  name_template: 'terraform-provider-{{ .Env.PROJECT_NAME }}_{{ .Env.BUILD_VERSION }}_SHA256SUMS'
+  algorithm: sha256
+signs:
+  - artifacts: checksum
+    args:
+      # if you are using this in a GitHub action or some other automated pipeline, you 
+      # need to pass the batch flag to indicate its not interactive.
+      - "--batch"
+      - "--yes"
+      - "--pinentry-mode"
+      - "loopback"
+      - "--passphrase-fd"
+      - "0"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}" # set this environment variable for your signing key
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+    stdin: "{{ .Env.GPG_PASSPHRASE }}" # optional for keys with a passphrase; required in unattended CI when key is protected
+release:
+  extra_files:
+    - glob: 'terraform-registry-manifest.json'
+      name_template: '{{  .Env.PROJECT_NAME }}_{{ .Env.BUILD_VERSION }}_manifest.json'
+  # If you want to manually examine the release before its live, uncomment this line:
+  # draft: true
+
